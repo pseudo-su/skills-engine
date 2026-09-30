@@ -28,7 +28,7 @@ headless
         independently
             outline "existing unit test coverage"
             outline "implementation behaviour and expected cases"
-        |> reconcile "gaps, mismatches, and boundaries in both directions"
+        |> "reconcile gaps, mismatches, and boundaries in both directions"
         |> grill "finalise the outline and course of action"
     |> extract
 ```

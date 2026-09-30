@@ -12,7 +12,7 @@ recast "unit tests for the requested target"
     independently
         outline "existing unit test coverage from target tests only"
         outline "expected cases from target implementation only"
-    |> reconcile "coverage, behaviour, and unit boundaries in both directions"
+    |> "reconcile coverage, behaviour, and unit boundaries in both directions"
     |> grill "finalise the complete outline and course of action"
 |> extract
 ```

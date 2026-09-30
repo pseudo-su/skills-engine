@@ -9,8 +9,9 @@ Interpret this notation as instructions for an agent, not executable code. Load 
 
 ## Core primitives
 
-- **Indentation:** establish scope. A wrapper governs all descendants and their decision points. The innermost explicit interaction policy overrides its enclosing policy within that subtree; restore the outer policy on leaving it.
-- **`|>`:** pass the preceding result into the next operation. At a given indentation level it connects adjacent expressions. A block returns its final expression unless its primitive specifies otherwise.
+- **Indentation:** give an operation a child block and establish its scope. Evaluate the block and supply its result to the containing operation, subject to that operation's contract. A wrapper governs all descendants and their decision points. The innermost explicit interaction policy overrides its enclosing policy within that subtree; restore the outer policy on leaving it.
+- **`|>`:** pass the preceding result into the next operation. At a given indentation level it connects adjacent expressions. A block returns its final expression unless its primitive specifies otherwise. Supplying an expression as a child block or piping its result into the containing operation are equivalent when that operation accepts the same input in either position.
+- **Raw strings:** interpret a string in expression position as instructions to perform. Interpret a string following a named operation as an argument to that operation. Raw-string instructions are not implied named primitives.
 - **`separately`:** perform each child as a distinct task and return all child results, labelled by task. Shared context and collaboration are allowed. No execution order or parallelism is implied.
 - **`independently`:** return the same collection, with isolation. Give each child only its assigned inputs and necessary shared instructions. Do not share siblings' evidence, working, outputs, or conclusions until all children finish. Restrict source access as well as message history. Use fresh contexts with task-specific inputs where supported. If isolation cannot be achieved, disclose the limitation; do not claim an independent result from a context that has already seen the excluded material.
 
@@ -32,7 +33,7 @@ cautiously
         independently
             outline "existing test coverage; inspect only the target tests"
             outline "expected cases; inspect only the target implementation"
-        |> reconcile "coverage, behaviour, and boundaries in both directions"
+        |> "reconcile coverage, behaviour, and boundaries in both directions"
         |> grill "finalise the outline and course of action"
     |> extract
 ```
