@@ -18,7 +18,7 @@ Work through a real problem, capture the useful method, use it in a fresh sessio
 | [improve-skill](skills/improve-skill/SKILL.md) | Evidence-based improvement, including itself |
 | [recast-unit-tests](skills/recast-unit-tests/SKILL.md) | First concrete composed application |
 
-These are initial drafts derived from an exercised test-recreation process and subsequent design discussion. Structural checks do not establish behavioural effectiveness. See [the first-use checks](evals/first-use.md).
+These are initial drafts derived from an exercised test-recreation process and subsequent design discussion. Their effectiveness needs evidence from real use. Static analysis and evaluation approaches remain open questions in [TODO.md](TODO.md).
 
 ## Composition
 
@@ -42,7 +42,6 @@ Indentation scopes policy. `|>` passes results. `separately` returns distinct ch
 ```sh
 git clone https://github.com/pseudo-su/skills-engine.git
 cd skills-engine
-python3 scripts/check.py
 python3 scripts/link.py --destination ~/.agents/skills --dry-run
 python3 scripts/link.py --destination ~/.agents/skills
 ```

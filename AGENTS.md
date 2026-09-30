@@ -6,6 +6,6 @@ Canonical authored skills live in skills/. Global harness entries should be syml
 
 Composition is instruction notation. Do not build an interpreter, dependency engine, or overlay mechanism without a concrete need. Preserve the contracts of independently, separately, indentation scope, and pipes. Do not describe a same-context analysis as independent or blind.
 
-Run python3 scripts/check.py after changes. Exercise link installation in a temporary directory when changing scripts/link.py. Process revisions need evidence from fresh use; record what has and has not been evaluated. Do not claim behavioural validation from schema checks alone.
+Exercise link installation in a temporary directory when changing scripts/link.py. Process revisions need evidence from fresh use; record what has and has not been evaluated. Static analysis and evaluation approaches are undecided; consult TODO.md before introducing infrastructure.
 
 Use normal git review and recovery. Never stage unrelated user work or overwrite an occupied installation path. Do not choose a repository-wide license on the owner's behalf.
