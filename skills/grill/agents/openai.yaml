@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grill"
+  short_description: "Challenge assumptions and settle consequential choices"
+  default_prompt: "Use $grill for the requested task."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recast"
+  short_description: "Rebuild from an outline with blind recreation and comparison"
+  default_prompt: "Use $recast for the requested task."

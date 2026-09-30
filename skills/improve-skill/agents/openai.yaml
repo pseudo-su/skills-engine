@@ -1,0 +1,4 @@
+interface:
+  display_name: "Improve Skill"
+  short_description: "Improve working methods from real execution evidence"
+  default_prompt: "Use $improve-skill for the requested task."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recast Unit Tests"
+  short_description: "Rebuild tests from independent behaviour inventories"
+  default_prompt: "Use $recast-unit-tests for the requested task."

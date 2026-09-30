@@ -1,0 +1,4 @@
+interface:
+  display_name: "Outline"
+  short_description: "Build a structured understanding for subsequent work"
+  default_prompt: "Use $outline for the requested task."

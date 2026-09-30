@@ -1,0 +1,4 @@
+interface:
+  display_name: "Composition"
+  short_description: "Compose methods with scopes, pipes, and context boundaries"
+  default_prompt: "Use $composition for the requested task."

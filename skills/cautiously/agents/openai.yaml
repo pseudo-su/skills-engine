@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cautiously"
+  short_description: "Check alignment at meaningful decision points"
+  default_prompt: "Use $cautiously for the requested task."

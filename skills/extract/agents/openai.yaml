@@ -1,0 +1,4 @@
+interface:
+  display_name: "Extract"
+  short_description: "Carry useful session outcomes into durable artifacts"
+  default_prompt: "Use $extract for the requested task."
