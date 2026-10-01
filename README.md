@@ -48,19 +48,27 @@ Indentation scopes policy. `|>` passes results. `gate` reports the preceding res
 ```sh
 git clone https://github.com/pseudo-su/skills-engine.git
 cd skills-engine
-scripts/link --destination ~/.agents/skills --dry-run
-scripts/link --destination ~/.agents/skills
+scripts/link connect ~/.agents/skills
 ```
 
-The explicit destination keeps harness integration configurable. Use `~/.claude/skills` instead for a Claude Code installation that discovers that directory. Each link points directly to a skill in this checkout. Existing unrelated entries are never overwritten. Keep the checkout at a stable path; moving it breaks links. Project/team skills can be linked into a project's discovery directory instead and maintained through its review process.
+Use `~/.codex/skills` for Codex or `~/.claude/skills` for Claude Code. Connecting records the destination in gitignored checkout-local state and synchronizes its skill links. Each link points directly to a skill in this checkout. Existing unrelated entries are never overwritten. Keep the checkout at a stable path; moving it breaks links. Project/team skills can be connected to a project's discovery directory instead and maintained through its review process.
 
-Unlink using the same checkout and destination:
+Synchronize or inspect every connected destination:
 
 ```sh
-scripts/link --destination ~/.agents/skills --remove
+scripts/link sync
+scripts/link status
 ```
 
-Only links owned by this checkout are removed. A normal run also prunes owned links to skills that have been removed from the checkout. The script does not configure the harness or install anything until invoked.
+Disconnecting clears links owned by this checkout and forgets the destination. Pass `--no-sync` to `connect` or `disconnect` to change only the recorded connection state.
+
+```sh
+scripts/link disconnect ~/.agents/skills
+```
+
+Synchronization also prunes owned links to skills removed from the checkout. The script does not configure the harness or install anything until invoked.
+
+See [linking authored skills](docs/linking-skills.md) for the complete interface, ownership rules, and synchronization behavior.
 
 ## Ownership and evolution
 

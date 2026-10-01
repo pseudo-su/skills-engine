@@ -4,16 +4,27 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/link --destination DIRECTORY [--dry-run] [--remove]
-       scripts/link -h|--help
+Usage:
+  scripts/link connect DIRECTORY [--no-sync]
+  scripts/link disconnect DIRECTORY [--no-sync]
+  scripts/link sync [DIRECTORY ...] [--dry-run]
+  scripts/link clear [DIRECTORY ...] [--dry-run]
+  scripts/link status [DIRECTORY ...]
+  scripts/link -h|--help
 
-Synchronise authored skill links into a harness discovery directory.
+Connect harness discovery directories to this checkout and manage their skill links.
+
+Commands:
+  connect      Record a destination and synchronize it unless --no-sync is used.
+  disconnect   Clear and forget a destination unless --no-sync is used.
+  sync         Synchronize selected destinations, or every connected destination.
+  clear        Remove owned links from selected destinations, or every connected destination.
+  status       Inspect selected destinations, or every connected destination.
 
 Options:
-  --destination DIRECTORY  Required destination for skill links.
-  --dry-run                Print planned changes without applying them.
-  --remove                 Remove every link owned by this checkout.
-  -h, --help               Show this help.
+  --no-sync    Change connection state without changing destination links.
+  --dry-run    Report sync or clear changes without applying them.
+  -h, --help   Show this help.
 EOF
 }
 
@@ -22,19 +33,25 @@ fail() {
   exit 2
 }
 
-destination_arg=''
-destination=''
-destination_exists=false
+command=''
 dry_run=false
-remove_mode=false
+no_sync=false
 repository_root=''
 skills_root=''
+state_directory=''
+destinations_file=''
+destination=''
+destination_exists=false
+
+declare -a destination_args=()
+declare -a connected_destinations=()
+declare -a selected_destinations=()
 
 declare -A skill_sources=()
-declare -A owned_link_targets=()
 declare -a skill_names=()
-declare -a owned_link_names=()
 
+declare -A owned_link_targets=()
+declare -a owned_link_names=()
 declare -a current_skill_names=()
 declare -a links_to_remove=()
 declare -a skills_to_link=()
@@ -44,65 +61,63 @@ declare -a temporary_files=()
 temporary_file=''
 
 parse_arguments() {
+  (($#)) || fail 'a command is required'
+
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    connect|disconnect|sync|clear|status)
+      command=$1
+      shift
+      ;;
+    *)
+      fail "unknown command: $1"
+      ;;
+  esac
+
   while (($#)); do
     case "$1" in
       -h|--help)
         usage
         exit 0
         ;;
-      --destination)
-        [[ -z "$destination_arg" ]] || fail '--destination may only be specified once'
-        (($# >= 2)) || fail 'missing value for --destination'
-        [[ -n "$2" && "$2" != -* ]] || fail 'missing value for --destination'
-        destination_arg=$2
-        shift 2
-        ;;
       --dry-run)
+        [[ "$command" == sync || "$command" == clear ]] || fail "--dry-run is not valid for $command"
         dry_run=true
-        shift
         ;;
-      --remove)
-        remove_mode=true
-        shift
+      --no-sync)
+        [[ "$command" == connect || "$command" == disconnect ]] || fail "--no-sync is not valid for $command"
+        no_sync=true
+        ;;
+      --*)
+        fail "unknown option for $command: $1"
         ;;
       *)
-        fail "unknown argument: $1"
+        destination_args+=("$1")
         ;;
     esac
+    shift
   done
 
-  [[ -n "$destination_arg" ]] || fail '--destination is required'
+  if [[ "$command" == connect || "$command" == disconnect ]]; then
+    ((${#destination_args[@]} == 1)) || fail "$command requires exactly one directory"
+  fi
 }
 
-resolve_paths() {
+resolve_checkout_paths() {
   local script_directory
 
   script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
   repository_root=$(realpath -m -- "$script_directory/..")
   skills_root=$(realpath -m -- "$repository_root/skills")
-  destination=$(realpath -m -- "$destination_arg") || fail "invalid destination: $destination_arg"
+  state_directory=$repository_root/.state
+  destinations_file=$state_directory/link-destinations
 }
 
-validate_destination() {
-  local existing_ancestor parent
-
-  if [[ -e "$destination" || -L "$destination" ]]; then
-    [[ -d "$destination" ]] || fail "destination is not a directory: $destination_arg"
-    destination_exists=true
-    return
-  fi
-
-  "$remove_mode" && return
-
-  existing_ancestor=$destination
-  while [[ ! -e "$existing_ancestor" && ! -L "$existing_ancestor" ]]; do
-    parent=$(dirname -- "$existing_ancestor")
-    [[ "$parent" != "$existing_ancestor" ]] || break
-    existing_ancestor=$parent
-  done
-
-  [[ -d "$existing_ancestor" ]] || fail "destination cannot be created below a non-directory: $destination_arg"
-  [[ -w "$existing_ancestor" ]] || fail "destination cannot be created below an unwritable directory: $destination_arg"
+normalize_destination() {
+  realpath -m -- "$1" || fail "invalid destination: $1"
 }
 
 cleanup_temporary_files() {
@@ -114,6 +129,73 @@ make_temporary_file() {
 
   temporary_file=$(mktemp "${TMPDIR:-/tmp}/$prefix.XXXXXX") || fail 'cannot create temporary file'
   temporary_files+=("$temporary_file")
+}
+
+load_connected_destinations() {
+  [[ -f "$destinations_file" ]] || return 0
+  mapfile -d '' -t connected_destinations <"$destinations_file"
+}
+
+is_connected() {
+  local candidate=$1 connected
+
+  for connected in "${connected_destinations[@]}"; do
+    [[ "$connected" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+write_connected_destinations() {
+  local registry_update
+
+  mkdir -p -- "$state_directory"
+  registry_update=$(mktemp "$state_directory/link-destinations.XXXXXX") || fail 'cannot create destination registry update'
+  temporary_files+=("$registry_update")
+  if ((${#connected_destinations[@]})); then
+    printf '%s\0' "${connected_destinations[@]}" | sort -zu >"$registry_update"
+  fi
+  mv -- "$registry_update" "$destinations_file"
+}
+
+register_destination() {
+  local candidate=$1
+
+  if is_connected "$candidate"; then
+    printf 'Already connected: %s\n' "$candidate"
+    return
+  fi
+
+  connected_destinations+=("$candidate")
+  write_connected_destinations
+  printf 'Connected: %s\n' "$candidate"
+}
+
+unregister_destination() {
+  local candidate=$1 connected
+  local -a retained=()
+
+  is_connected "$candidate" || fail "destination is not connected: $candidate"
+  for connected in "${connected_destinations[@]}"; do
+    [[ "$connected" == "$candidate" ]] || retained+=("$connected")
+  done
+  connected_destinations=("${retained[@]}")
+  write_connected_destinations
+  printf 'Disconnected: %s\n' "$candidate"
+}
+
+select_destinations() {
+  local argument candidate
+
+  if ((${#destination_args[@]} == 0)); then
+    selected_destinations=("${connected_destinations[@]}")
+    return
+  fi
+
+  for argument in "${destination_args[@]}"; do
+    candidate=$(normalize_destination "$argument")
+    is_connected "$candidate" || fail "destination is not connected: $argument"
+    selected_destinations+=("$candidate")
+  done
 }
 
 discover_skills() {
@@ -143,6 +225,40 @@ discover_skills() {
   mapfile -d '' -t skill_names <"$skill_name_list"
 }
 
+prepare_destination() {
+  local requested=$1 existing_ancestor parent
+
+  destination=$(normalize_destination "$requested")
+  destination_exists=false
+
+  if [[ -e "$destination" || -L "$destination" ]]; then
+    [[ -d "$destination" ]] || fail "destination is not a directory: $requested"
+    destination_exists=true
+    return
+  fi
+
+  [[ "$command" == clear || "$command" == disconnect || "$command" == status ]] && return
+
+  existing_ancestor=$destination
+  while [[ ! -e "$existing_ancestor" && ! -L "$existing_ancestor" ]]; do
+    parent=$(dirname -- "$existing_ancestor")
+    [[ "$parent" != "$existing_ancestor" ]] || break
+    existing_ancestor=$parent
+  done
+
+  [[ -d "$existing_ancestor" ]] || fail "destination cannot be created below a non-directory: $requested"
+  [[ -w "$existing_ancestor" ]] || fail "destination cannot be created below an unwritable directory: $requested"
+}
+
+reset_destination_state() {
+  owned_link_targets=()
+  owned_link_names=()
+  current_skill_names=()
+  links_to_remove=()
+  skills_to_link=()
+  conflicting_paths=()
+}
+
 # Resolve the link's stored target lexically. Existing symlink components are
 # not followed, and the target does not need to exist.
 normalize_link_target() {
@@ -156,17 +272,10 @@ normalize_link_target() {
   fi
 }
 
-is_owned_target() {
-  local normalized_target=$1
-  [[ "$normalized_target" == "$skills_root/"* ]]
-}
-
 inventory_destination() {
   local destination_link_list link_path normalized_target name
 
-  if ! "$destination_exists"; then
-    return 0
-  fi
+  "$destination_exists" || return 0
 
   make_temporary_file skills-link-destination
   destination_link_list=$temporary_file
@@ -176,31 +285,21 @@ inventory_destination() {
 
   while IFS= read -r -d '' link_path; do
     normalized_target=$(normalize_link_target "$link_path")
-    is_owned_target "$normalized_target" || continue
-
+    [[ "$normalized_target" == "$skills_root/"* ]] || continue
     name=${link_path##*/}
     owned_link_names+=("$name")
     owned_link_targets["$name"]=$normalized_target
   done <"$destination_link_list"
 }
 
-plan_owned_link_removal() {
-  local name
-
-  for name in "${owned_link_names[@]}"; do
-    links_to_remove+=("$destination/$name")
-  done
-}
-
 plan_skill_link() {
-  local name=$1 destination_path desired_source current_target
+  local name=$1 destination_path desired_source
 
   destination_path=$destination/$name
   desired_source=${skill_sources[$name]}
 
   if [[ -v "owned_link_targets[$name]" ]]; then
-    current_target=${owned_link_targets[$name]}
-    if [[ "$current_target" == "$desired_source" ]]; then
+    if [[ "${owned_link_targets[$name]}" == "$desired_source" ]]; then
       current_skill_names+=("$name")
     else
       links_to_remove+=("$destination_path")
@@ -213,30 +312,29 @@ plan_skill_link() {
   fi
 }
 
-plan_stale_link_removals() {
-  local name
-
-  for name in "${owned_link_names[@]}"; do
-    if [[ ! -v "skill_sources[$name]" ]]; then
-      links_to_remove+=("$destination/$name")
-    fi
-  done
-}
-
 plan_synchronization() {
   local name
 
   for name in "${skill_names[@]}"; do
     plan_skill_link "$name"
   done
-  plan_stale_link_removals
+  for name in "${owned_link_names[@]}"; do
+    [[ -v "skill_sources[$name]" ]] || links_to_remove+=("$destination/$name")
+  done
+}
+
+plan_clear() {
+  local name
+
+  for name in "${owned_link_names[@]}"; do
+    links_to_remove+=("$destination/$name")
+  done
 }
 
 reject_conflicts() {
   local path
 
   ((${#conflicting_paths[@]} == 0)) && return
-
   for path in "${conflicting_paths[@]}"; do
     printf 'link: occupied desired path: %s\n' "$path" >&2
   done
@@ -245,7 +343,6 @@ reject_conflicts() {
 
 report_current_links() {
   local name
-
   for name in "${current_skill_names[@]}"; do
     printf 'Already linked: %s\n' "$destination/$name"
   done
@@ -253,7 +350,6 @@ report_current_links() {
 
 report_planned_changes() {
   local path name
-
   for path in "${links_to_remove[@]}"; do
     printf 'Would remove: %s\n' "$path"
   done
@@ -262,61 +358,143 @@ report_planned_changes() {
   done
 }
 
-create_destination_if_needed() {
-  "$destination_exists" || mkdir -p -- "$destination"
-}
+apply_plan() {
+  local path name
 
-execute_removals() {
-  local path
-
-  for path in "${links_to_remove[@]}"; do
-    printf 'Remove: %s\n' "$path"
-    unlink -- "$path"
-  done
-}
-
-execute_links() {
-  local name path
-
-  for name in "${skills_to_link[@]}"; do
-    path=$destination/$name
-    printf 'Link: %s -> %s\n' "$path" "${skill_sources[$name]}"
-    ln -s -- "${skill_sources[$name]}" "$path"
-  done
-}
-
-execute_plan() {
   report_current_links
-
   if "$dry_run"; then
     report_planned_changes
     return
   fi
 
-  if ((${#skills_to_link[@]})); then
-    create_destination_if_needed
+  if ((${#skills_to_link[@]})) && ! "$destination_exists"; then
+    mkdir -p -- "$destination"
   fi
-  execute_removals
-  execute_links
+  for path in "${links_to_remove[@]}"; do
+    printf 'Remove: %s\n' "$path"
+    unlink -- "$path"
+  done
+  for name in "${skills_to_link[@]}"; do
+    printf 'Link: %s -> %s\n' "$destination/$name" "${skill_sources[$name]}"
+    ln -s -- "${skill_sources[$name]}" "$destination/$name"
+  done
+}
+
+sync_destination() {
+  prepare_destination "$1"
+  reset_destination_state
+  inventory_destination
+  plan_synchronization
+  reject_conflicts
+  apply_plan
+}
+
+clear_destination() {
+  prepare_destination "$1"
+  reset_destination_state
+  inventory_destination
+  plan_clear
+  apply_plan
+}
+
+report_status() {
+  local requested=$1 name path
+
+  prepare_destination "$requested"
+  reset_destination_state
+  inventory_destination
+  plan_synchronization
+
+  printf 'Destination: %s\n' "$destination"
+  if "$destination_exists"; then
+    printf '  State: present\n'
+  else
+    printf '  State: missing\n'
+  fi
+  for name in "${current_skill_names[@]}"; do
+    printf '  Current: %s\n' "$name"
+  done
+  for name in "${skills_to_link[@]}"; do
+    if [[ -v "owned_link_targets[$name]" ]]; then
+      printf '  Retarget: %s\n' "$name"
+    else
+      printf '  Missing: %s\n' "$name"
+    fi
+  done
+  for path in "${links_to_remove[@]}"; do
+    name=${path##*/}
+    [[ -v "skill_sources[$name]" ]] || printf '  Stale: %s\n' "$name"
+  done
+  for path in "${conflicting_paths[@]}"; do
+    printf '  Conflict: %s\n' "${path##*/}"
+  done
+}
+
+run_for_selected_destinations() {
+  local selected
+
+  select_destinations
+  if ((${#selected_destinations[@]} == 0)); then
+    printf 'No connected destinations.\n'
+    return
+  fi
+
+  for selected in "${selected_destinations[@]}"; do
+    case "$command" in
+      sync) sync_destination "$selected" ;;
+      clear) clear_destination "$selected" ;;
+      status) report_status "$selected" ;;
+    esac
+  done
+}
+
+connect_destination() {
+  local candidate
+  candidate=$(normalize_destination "${destination_args[0]}")
+
+  if "$no_sync"; then
+    register_destination "$candidate"
+    return
+  fi
+
+  prepare_destination "$candidate"
+  reset_destination_state
+  inventory_destination
+  plan_synchronization
+  reject_conflicts
+  register_destination "$candidate"
+  apply_plan
+}
+
+disconnect_destination() {
+  local candidate
+  candidate=$(normalize_destination "${destination_args[0]}")
+  is_connected "$candidate" || fail "destination is not connected: ${destination_args[0]}"
+
+  if ! "$no_sync"; then
+    clear_destination "$candidate"
+  fi
+  unregister_destination "$candidate"
 }
 
 main() {
   parse_arguments "$@"
-  resolve_paths
-  validate_destination
-
+  resolve_checkout_paths
   trap cleanup_temporary_files EXIT
-  discover_skills
-  inventory_destination
+  load_connected_destinations
 
-  if "$remove_mode"; then
-    plan_owned_link_removal
-  else
-    plan_synchronization
-    reject_conflicts
-  fi
-
-  execute_plan
+  case "$command" in
+    connect)
+      "$no_sync" || discover_skills
+      connect_destination
+      ;;
+    disconnect) disconnect_destination ;;
+    sync|status)
+      discover_skills
+      run_for_selected_destinations
+      ;;
+    clear) run_for_selected_destinations ;;
+  esac
 }
 
 main "$@"
