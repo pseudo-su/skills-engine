@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/link --destination DIRECTORY [--dry-run] [--remove]
+       scripts/link -h|--help
+
+Synchronise authored skill links into a harness discovery directory.
+
+Options:
+  --destination DIRECTORY  Required destination for skill links.
+  --dry-run                Print planned changes without applying them.
+  --remove                 Remove every link owned by this checkout.
+  -h, --help               Show this help.
+EOF
+}
+
+fail() {
+  printf 'link: %s\n' "$*" >&2
+  exit 2
+}
+
+destination_arg=''
+destination=''
+destination_exists=false
+dry_run=false
+remove_mode=false
+repository_root=''
+skills_root=''
+
+declare -A skill_sources=()
+declare -A owned_link_targets=()
+declare -a skill_names=()
+declare -a owned_link_names=()
+
+declare -a current_skill_names=()
+declare -a links_to_remove=()
+declare -a skills_to_link=()
+declare -a conflicting_paths=()
+
+declare -a temporary_files=()
+temporary_file=''
+
+parse_arguments() {
+  while (($#)); do
+    case "$1" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --destination)
+        [[ -z "$destination_arg" ]] || fail '--destination may only be specified once'
+        (($# >= 2)) || fail 'missing value for --destination'
+        [[ -n "$2" && "$2" != -* ]] || fail 'missing value for --destination'
+        destination_arg=$2
+        shift 2
+        ;;
+      --dry-run)
+        dry_run=true
+        shift
+        ;;
+      --remove)
+        remove_mode=true
+        shift
+        ;;
+      *)
+        fail "unknown argument: $1"
+        ;;
+    esac
+  done
+
+  [[ -n "$destination_arg" ]] || fail '--destination is required'
+}
+
+resolve_paths() {
+  local script_directory
+
+  script_directory=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+  repository_root=$(realpath -m -- "$script_directory/..")
+  skills_root=$(realpath -m -- "$repository_root/skills")
+  destination=$(realpath -m -- "$destination_arg") || fail "invalid destination: $destination_arg"
+}
+
+validate_destination() {
+  local existing_ancestor parent
+
+  if [[ -e "$destination" || -L "$destination" ]]; then
+    [[ -d "$destination" ]] || fail "destination is not a directory: $destination_arg"
+    destination_exists=true
+    return
+  fi
+
+  "$remove_mode" && return
+
+  existing_ancestor=$destination
+  while [[ ! -e "$existing_ancestor" && ! -L "$existing_ancestor" ]]; do
+    parent=$(dirname -- "$existing_ancestor")
+    [[ "$parent" != "$existing_ancestor" ]] || break
+    existing_ancestor=$parent
+  done
+
+  [[ -d "$existing_ancestor" ]] || fail "destination cannot be created below a non-directory: $destination_arg"
+  [[ -w "$existing_ancestor" ]] || fail "destination cannot be created below an unwritable directory: $destination_arg"
+}
+
+cleanup_temporary_files() {
+  ((${#temporary_files[@]})) && rm -f -- "${temporary_files[@]}"
+}
+
+make_temporary_file() {
+  local prefix=$1
+
+  temporary_file=$(mktemp "${TMPDIR:-/tmp}/$prefix.XXXXXX") || fail 'cannot create temporary file'
+  temporary_files+=("$temporary_file")
+}
+
+discover_skills() {
+  local manifest_list skill_name_list manifest source_directory name
+
+  make_temporary_file skills-link-manifests
+  manifest_list=$temporary_file
+  if ! find "$skills_root" -type f -name SKILL.md -print0 | sort -z >"$manifest_list"; then
+    fail "skill discovery failed below $skills_root"
+  fi
+  [[ -s "$manifest_list" ]] || fail "no skills found below $skills_root"
+
+  while IFS= read -r -d '' manifest; do
+    source_directory=$(realpath -m -- "$(dirname -- "$manifest")")
+    name=${source_directory##*/}
+    if [[ -v "skill_sources[$name]" ]]; then
+      fail "duplicate skill name '$name': ${skill_sources[$name]} and $source_directory"
+    fi
+    skill_sources["$name"]=$source_directory
+  done <"$manifest_list"
+
+  make_temporary_file skills-link-names
+  skill_name_list=$temporary_file
+  if ! printf '%s\0' "${!skill_sources[@]}" | sort -z >"$skill_name_list"; then
+    fail 'skill-name sorting failed'
+  fi
+  mapfile -d '' -t skill_names <"$skill_name_list"
+}
+
+# Resolve the link's stored target lexically. Existing symlink components are
+# not followed, and the target does not need to exist.
+normalize_link_target() {
+  local link_path=$1 target
+
+  target=$(readlink -- "$link_path")
+  if [[ "$target" = /* ]]; then
+    realpath -ms -- "$target"
+  else
+    realpath -ms -- "$(dirname -- "$link_path")/$target"
+  fi
+}
+
+is_owned_target() {
+  local normalized_target=$1
+  [[ "$normalized_target" == "$skills_root/"* ]]
+}
+
+inventory_destination() {
+  local destination_link_list link_path normalized_target name
+
+  if ! "$destination_exists"; then
+    return 0
+  fi
+
+  make_temporary_file skills-link-destination
+  destination_link_list=$temporary_file
+  if ! find "$destination" -mindepth 1 -maxdepth 1 -type l -print0 | sort -z >"$destination_link_list"; then
+    fail "destination link discovery failed below $destination"
+  fi
+
+  while IFS= read -r -d '' link_path; do
+    normalized_target=$(normalize_link_target "$link_path")
+    is_owned_target "$normalized_target" || continue
+
+    name=${link_path##*/}
+    owned_link_names+=("$name")
+    owned_link_targets["$name"]=$normalized_target
+  done <"$destination_link_list"
+}
+
+plan_owned_link_removal() {
+  local name
+
+  for name in "${owned_link_names[@]}"; do
+    links_to_remove+=("$destination/$name")
+  done
+}
+
+plan_skill_link() {
+  local name=$1 destination_path desired_source current_target
+
+  destination_path=$destination/$name
+  desired_source=${skill_sources[$name]}
+
+  if [[ -v "owned_link_targets[$name]" ]]; then
+    current_target=${owned_link_targets[$name]}
+    if [[ "$current_target" == "$desired_source" ]]; then
+      current_skill_names+=("$name")
+    else
+      links_to_remove+=("$destination_path")
+      skills_to_link+=("$name")
+    fi
+  elif [[ -e "$destination_path" || -L "$destination_path" ]]; then
+    conflicting_paths+=("$destination_path")
+  else
+    skills_to_link+=("$name")
+  fi
+}
+
+plan_stale_link_removals() {
+  local name
+
+  for name in "${owned_link_names[@]}"; do
+    if [[ ! -v "skill_sources[$name]" ]]; then
+      links_to_remove+=("$destination/$name")
+    fi
+  done
+}
+
+plan_synchronization() {
+  local name
+
+  for name in "${skill_names[@]}"; do
+    plan_skill_link "$name"
+  done
+  plan_stale_link_removals
+}
+
+reject_conflicts() {
+  local path
+
+  ((${#conflicting_paths[@]} == 0)) && return
+
+  for path in "${conflicting_paths[@]}"; do
+    printf 'link: occupied desired path: %s\n' "$path" >&2
+  done
+  exit 2
+}
+
+report_current_links() {
+  local name
+
+  for name in "${current_skill_names[@]}"; do
+    printf 'Already linked: %s\n' "$destination/$name"
+  done
+}
+
+report_planned_changes() {
+  local path name
+
+  for path in "${links_to_remove[@]}"; do
+    printf 'Would remove: %s\n' "$path"
+  done
+  for name in "${skills_to_link[@]}"; do
+    printf 'Would link: %s -> %s\n' "$destination/$name" "${skill_sources[$name]}"
+  done
+}
+
+create_destination_if_needed() {
+  "$destination_exists" || mkdir -p -- "$destination"
+}
+
+execute_removals() {
+  local path
+
+  for path in "${links_to_remove[@]}"; do
+    printf 'Remove: %s\n' "$path"
+    unlink -- "$path"
+  done
+}
+
+execute_links() {
+  local name path
+
+  for name in "${skills_to_link[@]}"; do
+    path=$destination/$name
+    printf 'Link: %s -> %s\n' "$path" "${skill_sources[$name]}"
+    ln -s -- "${skill_sources[$name]}" "$path"
+  done
+}
+
+execute_plan() {
+  report_current_links
+
+  if "$dry_run"; then
+    report_planned_changes
+    return
+  fi
+
+  if ((${#skills_to_link[@]})); then
+    create_destination_if_needed
+  fi
+  execute_removals
+  execute_links
+}
+
+main() {
+  parse_arguments "$@"
+  resolve_paths
+  validate_destination
+
+  trap cleanup_temporary_files EXIT
+  discover_skills
+  inventory_destination
+
+  if "$remove_mode"; then
+    plan_owned_link_removal
+  else
+    plan_synchronization
+    reject_conflicts
+  fi
+
+  execute_plan
+}
+
+main "$@"

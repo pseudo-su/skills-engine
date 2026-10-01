@@ -1,4 +1,4 @@
 interface:
   display_name: "Composition"
-  short_description: "Compose methods with scopes, pipes, and context boundaries"
+  short_description: "Interpret composed skills and their information flow"
   default_prompt: "Use $composition for the requested task."

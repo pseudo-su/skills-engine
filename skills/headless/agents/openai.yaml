@@ -1,4 +1,0 @@
-interface:
-  display_name: "Headless"
-  short_description: "Decide autonomously and report consequential assumptions"
-  default_prompt: "Use $headless for the requested task."
