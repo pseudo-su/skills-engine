@@ -1,8 +1,8 @@
 # Skills Engine
 
-A personal skills library for improving agentic working methods through real use.
+Skills Engine is a methodology layer for iteratively defining and improving what good agent work requires: evidence boundaries, uncertainty handling, verification, user review, and the preservation of evidence-backed judgment.
 
-Work through a real problem, capture the useful method, use it in a fresh session, extract evidence, revise, and repeat. A committed revision is a hypothesis about better execution; reuse supplies the evidence.
+It is maintained as a personal skills library and developed through real use: work through a problem, capture the useful method, exercise it in a fresh session, extract evidence, revise, and repeat. A committed revision is a hypothesis about better execution; reuse supplies the evidence.
 
 ## First version
 
@@ -48,25 +48,25 @@ Indentation scopes policy. `|>` passes results. `gate` reports the preceding res
 ```sh
 git clone https://github.com/pseudo-su/skills-engine.git
 cd skills-engine
-scripts/link connect ~/.agents/skills
+scripts/link init
 ```
 
-Use `~/.codex/skills` for Codex or `~/.claude/skills` for Claude Code. Connecting records the destination in gitignored checkout-local state and synchronizes its skill links. Each link points directly to a skill in this checkout. Existing unrelated entries are never overwritten. Keep the checkout at a stable path; moving it breaks links. Project/team skills can be connected to a project's discovery directory instead and maintained through its review process.
+Initialization discovers existing `~/.codex/skills`, `~/.claude/skills`, and `~/.agents/skills` directories, records them in gitignored checkout-local state, and synchronizes their skill links. Add another destination explicitly with `scripts/link dest add DIRECTORY`. Each link points directly to a skill in this checkout. Existing unrelated entries are never overwritten. Keep the checkout at a stable path; moving it breaks links.
 
-Synchronize or inspect every connected destination:
+Synchronize or inspect every added destination:
 
 ```sh
 scripts/link sync
 scripts/link status
 ```
 
-Disconnecting clears links owned by this checkout and forgets the destination. Pass `--no-sync` to `connect` or `disconnect` to change only the recorded connection state.
+Removing a destination clears links owned by this checkout before forgetting it:
 
 ```sh
-scripts/link disconnect ~/.agents/skills
+scripts/link dest remove ~/.agents/skills
 ```
 
-Synchronization also prunes owned links to skills removed from the checkout. The script does not configure the harness or install anything until invoked.
+Use `scripts/link sync --clear` to clear owned links while retaining destination state. Synchronization also prunes owned links to skills removed from the checkout. The script does not configure the harness or install anything until invoked.
 
 See [linking authored skills](docs/linking-skills.md) for the complete interface, ownership rules, and synchronization behavior.
 
