@@ -44,7 +44,7 @@ Global preflight protects against known conflicts but cannot make filesystem mut
 
 Skill discovery recursively finds regular `SKILL.md` files beneath `skills/`. A skill's installed name is the basename of its manifest directory. Reject duplicate installed names even when their source directories differ.
 
-Well-known destination discovery currently checks Codex, Claude, and Agents skill directories. It reports only directories that exist. Do not add automatic pruning without settling how temporarily missing and manually added destinations should behave.
+Well-known destination discovery checks the documented native global skill directories listed in the user guide. It reports only directories that exist. Shared compatibility roots such as `~/.agents/skills` are intentionally excluded to avoid making the linker create duplicate discovery paths in harnesses that also scan their native roots. Do not add automatic pruning without settling how temporarily missing and manually added destinations should behave.
 
 ## Verification
 
@@ -70,6 +70,6 @@ Run Bash syntax and Git whitespace checks. Record which behaviors were exercised
 
 ## Current evidence and limits
 
-The current command model has been exercised in an isolated checkout for initialization, controlled Codex discovery, destination state, synchronization, clearing, status, retargeting, stale-link pruning, unrelated-link preservation, and cross-destination conflict preflight. The real checkout was used only for read-only status.
+The current command model has been exercised in an isolated checkout for initialization, controlled native-directory discovery, destination state, synchronization, clearing, status, retargeting, stale-link pruning, unrelated-link preservation, and cross-destination conflict preflight. The real checkout was used only for read-only status.
 
-Claude and Agents discovery paths have not been separately exercised. Unexpected failures during plan application, concurrent registry writers, and recovery from corrupted destination state have not been evaluated. ShellCheck was unavailable during the current revision.
+Every native harness path has not been separately exercised. Unexpected failures during plan application, concurrent registry writers, and recovery from corrupted destination state have not been evaluated. ShellCheck was unavailable during the current revision.

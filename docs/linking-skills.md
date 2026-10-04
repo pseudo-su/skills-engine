@@ -38,12 +38,31 @@ Discovered destinations remain recorded if later synchronization fails, making t
 `dest discover` checks these well-known discovery directories:
 
 ```text
-~/.codex/skills
+~/.pi/agent/skills
+~/.oh-omp/agent/skills
 ~/.claude/skills
-~/.agents/skills
+~/.codex/skills
+~/.copilot/skills
+~/.config/devin/skills
+~/.factory/skills
+~/.kimi/skills
+~/.config/opencode/skills
+~/.kilo/skills
+~/.hermes/skills
+~/.qoder/skills
+~/.qwen/skills
+~/.cursor/skills
+~/.mastracode/skills
+~/.gemini/config/skills
+~/.gemini/antigravity-cli/skills
+~/.grok/skills
 ```
 
+These are the native global skill directories for Pi, OMP, Claude, Codex, Copilot, Devin, Droid, Kimi, OpenCode, Kilo, Hermes, Qoder CLI, Qwen Code, Cursor, Mastra Code, Antigravity, and Grok. Antigravity's IDE and CLI use distinct native directories, so both are checked.
+
 Only directories that currently exist are reported. `--add` records and synchronizes newly discovered destinations. Discovery does not prune missing or manually added destinations.
+
+Shared compatibility directories such as `~/.agents/skills`, `~/.agent/skills`, and `~/.config/agents/skills` are deliberately not discovered. Several harnesses scan both a native directory and one or more shared directories, with inconsistent duplicate handling. A shared directory can still be connected explicitly with `dest add`.
 
 ### Addition and removal
 

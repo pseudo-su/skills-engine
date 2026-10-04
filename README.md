@@ -51,7 +51,7 @@ cd skills-engine
 scripts/link init
 ```
 
-Initialization discovers existing `~/.codex/skills`, `~/.claude/skills`, and `~/.agents/skills` directories, records them in gitignored checkout-local state, and synchronizes their skill links. Add another destination explicitly with `scripts/link dest add DIRECTORY`. Each link points directly to a skill in this checkout. Existing unrelated entries are never overwritten. Keep the checkout at a stable path; moving it breaks links.
+Initialization discovers existing native global skill directories for supported harnesses, records them in gitignored checkout-local state, and synchronizes their skill links. Shared compatibility directories such as `~/.agents/skills` are not discovered automatically; add one explicitly with `scripts/link dest add DIRECTORY` if wanted. Each link points directly to a skill in this checkout. Existing unrelated entries are never overwritten. Keep the checkout at a stable path; moving it breaks links.
 
 Synchronize or inspect every added destination:
 
@@ -63,7 +63,7 @@ scripts/link status
 Removing a destination clears links owned by this checkout before forgetting it:
 
 ```sh
-scripts/link dest remove ~/.agents/skills
+scripts/link dest remove ~/.codex/skills
 ```
 
 Use `scripts/link sync --clear` to clear owned links while retaining destination state. Synchronization also prunes owned links to skills removed from the checkout. The script does not configure the harness or install anything until invoked.

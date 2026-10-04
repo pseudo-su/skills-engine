@@ -250,9 +250,24 @@ remove_destination_state() {
 discover_well_known_destinations() {
   local candidate
   local -a candidates=(
-    "${HOME:?}/.codex/skills"
+    "${HOME:?}/.pi/agent/skills"
+    "${HOME:?}/.oh-omp/agent/skills"
     "${HOME:?}/.claude/skills"
-    "${HOME:?}/.agents/skills"
+    "${HOME:?}/.codex/skills"
+    "${HOME:?}/.copilot/skills"
+    "${HOME:?}/.config/devin/skills"
+    "${HOME:?}/.factory/skills"
+    "${HOME:?}/.kimi/skills"
+    "${HOME:?}/.config/opencode/skills"
+    "${HOME:?}/.kilo/skills"
+    "${HOME:?}/.hermes/skills"
+    "${HOME:?}/.qoder/skills"
+    "${HOME:?}/.qwen/skills"
+    "${HOME:?}/.cursor/skills"
+    "${HOME:?}/.mastracode/skills"
+    "${HOME:?}/.gemini/config/skills"
+    "${HOME:?}/.gemini/antigravity-cli/skills"
+    "${HOME:?}/.grok/skills"
   )
 
   discovered_destinations=()
