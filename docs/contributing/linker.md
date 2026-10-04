@@ -70,6 +70,6 @@ Run Bash syntax and Git whitespace checks. Record which behaviors were exercised
 
 ## Current evidence and limits
 
-The current command model has been exercised in an isolated checkout for initialization, controlled native-directory discovery, destination state, synchronization, clearing, status, retargeting, stale-link pruning, unrelated-link preservation, and cross-destination conflict preflight. The real checkout was used only for read-only status.
+The current command model has been exercised in an isolated checkout for initialization, controlled native-directory discovery, destination state, synchronization, clearing, status, retargeting, stale-link pruning, unrelated-link preservation, and cross-destination conflict preflight. Discovery of all listed native paths together, including exclusion of existing shared compatibility roots, has been exercised with a controlled home. The real checkout was used only for read-only status.
 
-Every native harness path has not been separately exercised. Unexpected failures during plan application, concurrent registry writers, and recovery from corrupted destination state have not been evaluated. ShellCheck was unavailable during the current revision.
+Actual skill ingestion by every harness has not been exercised. Unexpected failures during plan application, concurrent registry writers, and recovery from corrupted destination state have not been evaluated. ShellCheck was unavailable during the current revision.
