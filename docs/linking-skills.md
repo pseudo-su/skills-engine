@@ -109,23 +109,8 @@ Link: PATH -> SOURCE
 
 Explicit validation and conflict failures are written to standard error with a `link:` prefix and exit status 2. An underlying command can produce another nonzero status under Bash strict mode.
 
-## State and implementation model
+## Local state
 
 Destination state lives in `.state/link-destinations` beneath the checkout. `.state/` is gitignored. Registry updates use a temporary file followed by replacement.
 
-The implementation separates destination state from link state:
-
-1. Parse the command and resolve checkout paths.
-2. Load or initialize the destination registry.
-3. Discover source skills only for operations that require them.
-4. Inventory and classify every selected destination.
-5. Preflight all selected destinations before mutation.
-6. Update registry state at the command-defined boundary.
-7. Remove owned links before creating desired links.
-8. Remove registered temporary files when the process exits.
-
-The script requires Bash and uses null-delimited GNU-style `find`, `sort`, and `realpath` behavior. Keep the checkout at a stable path because installed links and the registry contain absolute paths.
-
-## Verification
-
-Changes to the linker must be exercised in an isolated checkout and temporary destinations. Cover initialization, discovery, destination state, synchronization, clearing, status, stale-link pruning, conflict preflight across multiple destinations, and preservation of unrelated entries. Record what has and has not been exercised; execution checks are evidence, not a permanent automated evaluation suite. Static analysis and evaluation design remain open questions in [`TODO.md`](../TODO.md).
+Keep the checkout at a stable path because installed links and destination state contain absolute paths. See the [linker contributor guide](contributing/linker.md) for implementation invariants and change verification.
